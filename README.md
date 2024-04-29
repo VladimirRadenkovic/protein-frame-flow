@@ -1,9 +1,8 @@
 # Fast protein backbone generation with SE(3) flow matching
 
 ## Changes
-Run #sample_traj.py for MD Leapfrog integration with FrameFlow force field. 
-#interpolant.py contains code for trajectory computation.
-
+- Run `sample_traj.py` for Molecular Dynamics Leapfrog integration utilizing the FrameFlow force field.
+- The code for computing trajectories can be found in `interpolant.py`.
 Source code for https://arxiv.org/abs/2310.05297.
 
 If you use this work (or code) then please cite the paper.
