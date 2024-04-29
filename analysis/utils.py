@@ -32,6 +32,29 @@ def create_full_prot(
         chain_index=chain_index,
         b_factors=b_factors)
 
+def create_CA_prot(
+    c_alpha_positions: np.ndarray,
+    c_alpha_mask: np.ndarray,
+    aatype=None,
+    b_factors=None,
+    ):
+    assert c_alpha_positions.ndim == 2
+    assert c_alpha_positions.shape[-1] == 3
+    n = c_alpha_positions.shape[0]
+    residue_index = np.arange(n)
+    chain_index = np.zeros(n)
+    if b_factors is None:
+        b_factors = np.zeros([n, 1])
+    if aatype is None:
+        aatype = np.zeros(n, dtype=int)
+    return protein.Protein(
+        atom_positions=c_alpha_positions[:, None, :],  # Reshape to [num_res, 1, 3]
+        atom_mask=c_alpha_mask[:, None],  # Reshape to [num_res, 1]
+        aatype=aatype,
+        residue_index=residue_index,
+        chain_index=chain_index,
+        b_factors=b_factors,
+)
 
 def write_prot_to_pdb(
         prot_pos: np.ndarray,
@@ -71,4 +94,47 @@ def write_prot_to_pdb(
         else:
             raise ValueError(f'Invalid positions shape {prot_pos.shape}')
         f.write('END')
+    return save_path
+
+def write_CA_to_pdb(
+    ca_pos: np.ndarray,
+    file_path: str,
+    aatype: np.ndarray = None,
+    overwrite=False,
+    no_indexing=False,
+    b_factors=None,
+):
+    if overwrite:
+        max_existing_idx = 0
+    else:
+        file_dir = os.path.dirname(file_path)
+        file_name = os.path.basename(file_path).strip('.pdb')
+        existing_files = [
+            x for x in os.listdir(file_dir) if file_name in x
+        ]
+        max_existing_idx = max(
+            [
+                int(re.findall(r'_(\d+).pdb', x)[0])
+                for x in existing_files
+                if re.findall(r'_(\d+).pdb', x)
+            ]
+            + [0]
+        )
+    if not no_indexing:
+        save_path = file_path.replace('.pdb', '') + f'_{max_existing_idx + 1}.pdb'
+    else:
+        save_path = file_path
+
+    with open(save_path, 'w') as f:
+        if ca_pos.ndim == 3:
+            for t, pos in enumerate(ca_pos):
+                atom_mask = np.sum(np.abs(pos), axis=-1) > 1e-7
+                prot = create_CA_prot(
+                    pos, atom_mask, aatype=aatype, b_factors=b_factors)
+                pdb_prot = protein.to_pdb(prot, model=t + 1, add_end=False)
+                f.write(pdb_prot)
+        else:
+            raise ValueError(f'Invalid positions shape {ca_pos.shape}')
+        f.write('END')
+
     return save_path
