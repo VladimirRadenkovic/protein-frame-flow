@@ -22,8 +22,27 @@ class NodeEmbedder(nn.Module):
             max_positions=2056
         )[:, None, :].repeat(1, mask.shape[1], 1)
         return timestep_emb * mask.unsqueeze(-1)
+    
+    def embed_t_2(self, timesteps, mask, motif_mask):
+        timestep_emb = get_time_embedding(
+            timesteps[:, 0],
+            self.c_timestep_emb,
+            max_positions=2056
+        )[:, None, :].repeat(1, mask.shape[1], 1)
 
-    def forward(self, timesteps, mask):
+        timesteps_mask = torch.ones_like(timesteps)
+
+        timestep_mask_emb = get_time_embedding(
+            timesteps_mask[:, 0],
+            self.c_timestep_emb,
+            max_positions=2056
+        )[:, None, :].repeat(1, mask.shape[1], 1)
+        timestep_emb = timestep_emb * mask.unsqueeze(-1)
+        timestep_mask_emb = timestep_mask_emb * mask.unsqueeze(-1)
+        timestep_emb[motif_mask == 0] = timestep_mask_emb[motif_mask == 0]
+        return timestep_emb
+
+    def forward(self, timesteps, mask, motif_mask = None):
         # s: [b]
 
         b, num_res, device = mask.shape[0], mask.shape[1], mask.device
@@ -39,5 +58,6 @@ class NodeEmbedder(nn.Module):
         # [b, n_res, c_timestep_emb]
         input_feats = [pos_emb]
         # timesteps are between 0 and 1. Convert to integers.
-        input_feats.append(self.embed_t(timesteps, mask))
+        #input_feats.append(self.embed_t(timesteps, mask))
+        input_feats.append(self.embed_t_2(timesteps, mask, motif_mask))
         return self.linear(torch.cat(input_feats, dim=-1))
