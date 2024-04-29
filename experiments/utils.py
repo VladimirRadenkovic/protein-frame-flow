@@ -104,6 +104,41 @@ def save_traj(
         'x0_traj_path': x0_traj_path,
     }
 
+def save_CA_traj(
+        bb_prot_traj: np.ndarray,
+        diffuse_mask: np.ndarray,
+        output_dir: str,
+        aatype = None,
+    ):
+
+    diffuse_mask = diffuse_mask.astype(bool)
+    #prot_traj_path = os.path.join(output_dir, 'bb_traj.pdb')
+    ca_traj_path = os.path.join(output_dir, 'CA_traj.pdb')
+
+    # Use b-factors to specify which residues are diffused.
+    b_factors = np.tile((diffuse_mask * 100)[:, None], (1, 37))
+
+    ca_traj = bb_prot_traj[:, :, 1, :]
+    #prot_traj_path = au.write_prot_to_pdb(
+        #bb_prot_traj,
+        #prot_traj_path,
+        #b_factors=b_factors,
+        #no_indexing=True,
+        #aatype=aatype,
+    #)
+    ca_traj_path = au.write_CA_to_pdb(
+        ca_traj,
+        ca_traj_path,
+        b_factors=b_factors,
+        no_indexing=True,
+        aatype=aatype
+    )
+    return {
+        #'traj_path': prot_traj_path,
+        'ca_traj_path': ca_traj_path,
+    }
+
+
 
 def get_pylogger(name=__name__) -> logging.Logger:
     """Initializes multi-GPU-friendly python command line logger."""
