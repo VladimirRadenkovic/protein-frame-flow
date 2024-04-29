@@ -61,6 +61,7 @@ class FlowModule(LightningModule):
     def model_step(self, noisy_batch: Any):
         training_cfg = self._exp_cfg.training
         loss_mask = noisy_batch['res_mask']
+        #loss_mask = noisy_batch['res_mask'] * noisy_batch['motif_mask']
         if training_cfg.min_plddt_mask is not None:
             plddt_mask = noisy_batch['res_plddt'] > training_cfg.min_plddt_mask
             loss_mask *= plddt_mask
@@ -152,13 +153,15 @@ class FlowModule(LightningModule):
         res_mask = batch['res_mask']
         self.interpolant.set_device(res_mask.device)
         num_batch, num_res = res_mask.shape
-        
-        samples = self.interpolant.sample(
-            num_batch,
-            num_res,
-            self.model,
+        #samples = self.interpolant.sample(
+            #num_batch,
+            #num_res,
+            #self.model,
+        #)[0][-1].numpy()
+        samples = self.interpolant.sample_amortized(
+            batch,
+            self.model
         )[0][-1].numpy()
-
         batch_metrics = []
         for i in range(num_batch):
 
@@ -230,7 +233,8 @@ class FlowModule(LightningModule):
     def training_step(self, batch: Any, stage: int):
         step_start_time = time.time()
         self.interpolant.set_device(batch['res_mask'].device)
-        noisy_batch = self.interpolant.corrupt_batch(batch)
+        #noisy_batch = self.interpolant.corrupt_batch(batch)
+        noisy_batch = self.interpolant.corrupt_batch_with_motif_amortization(batch)
         if self._interpolant_cfg.self_condition and random.random() > 0.5:
             with torch.no_grad():
                 model_sc = self.model(noisy_batch)
@@ -281,6 +285,7 @@ class FlowModule(LightningModule):
 
 
     def predict_step(self, batch, batch_idx):
+        #CHANGE THIS FOR SAMPLING
         device = f'cuda:{torch.cuda.current_device()}'
         interpolant = Interpolant(self._infer_cfg.interpolant) 
         interpolant.set_device(device)
@@ -295,8 +300,12 @@ class FlowModule(LightningModule):
             self._print_logger.info(
                 f'Skipping instance {sample_id} length {sample_length}')
             return
-        atom37_traj, model_traj, _ = interpolant.sample(
-            1, sample_length, self.model
+        #atom37_traj, model_traj, _ = interpolant.sample(
+            #1, sample_length, self.model
+        #)
+        atom37_traj, model_traj, _ = self.interpolant.sample_amortized(
+            batch,
+            self.model
         )
 
         os.makedirs(sample_dir, exist_ok=True)
@@ -305,6 +314,29 @@ class FlowModule(LightningModule):
             bb_traj[-1],
             bb_traj,
             np.flip(du.to_numpy(torch.concat(model_traj, dim=0)), axis=0),
+            du.to_numpy(diffuse_mask)[0],
+            output_dir=sample_dir,
+        )
+
+    def sample_traj(self, batch):
+        device = f'cuda:{torch.cuda.current_device()}'
+        interpolant = Interpolant(self._infer_cfg.interpolant) 
+        interpolant.set_device(device)
+        sample_length = batch['res_mask'].shape[1]
+        diffuse_mask = torch.ones(1, sample_length)
+        sample_id = batch['csv_idx']
+        sample_dir = os.path.join(
+            self._output_dir, f'length_{sample_length}', f'sample_{sample_id}')
+
+        atom37_traj, _ , _ = interpolant.sample_traj(
+            batch,
+            self.model
+        )
+        print(sample_dir)
+        os.makedirs(sample_dir, exist_ok=True)
+        bb_traj = du.to_numpy(torch.concat(atom37_traj, dim=0))
+        _ = eu.save_CA_traj(
+            bb_traj,
             du.to_numpy(diffuse_mask)[0],
             output_dir=sample_dir,
         )
